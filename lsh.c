@@ -3,21 +3,27 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
 
 #define LSH_RL_BUFSIZE 1024
 #define LSH_TOK_BUFSIZE 64
 #define LSH_TOK_DELIM " \t\r\n\a"
+
+typedef void (*sighandler_t)(int);
 
 void lsh_loop(void);
 char *lsh_read_line(void);
 char **lsh_split_line(char *line);
 int lsh_launch(char **args);
 int lsh_execute(char **args);
+sighandler_t signal(int signum, sighandler_t handler);
 
 int main(int argc, char *argv[])
 {
   // Load config files
   
+  // Ignore the SIGINT signal for the main process
+  signal(SIGINT, SIG_IGN);
   // Run command loop
   lsh_loop();
   
@@ -120,6 +126,8 @@ int lsh_launch(char **args)
     
     if(pid == 0) {
     	// Child process
+    	// Restore the default behaviour of SIGINT
+    	signal(SIGINT, SIG_DFL);
     	if(execvp(args[0], args) < 0) {
     	    perror("lsh");
     	} 

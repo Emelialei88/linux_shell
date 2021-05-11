@@ -21,7 +21,7 @@ int lsh_execute(char **args);
 void sigint_handler(int signo);
 int input_redirect(char **args, int pos);
 int output_redirect(char **args, int pos);
-int pipline(char **args, int pos);
+int pipeline(char **args, int pos);
 
 static sigjmp_buf env;
 static volatile sig_atomic_t jump_active = 0;
@@ -175,13 +175,18 @@ int lsh_launch(char **args)
 	*/
 	for(int j=0; args[j] != NULL; j++) {
 	    if(strcmp(args[j], "<") == 0) {
+	    	// CMD > file
 	        return input_redirect(args, j);
 	    }
     	    if(strcmp(args[j], ">") == 0) {
+    	    	// CMD < file
+    	    	printf("Entering....");
     	        return output_redirect(args, j);
     	    }
     	    if(strcmp(args[j], "|") == 0) {
-    	        return pipline(args, j);
+    	    	// CMD1 | CMD2
+    	    	printf("Entering....");
+    	        return pipeline(args, j); 
     	    }
 	}
     	
@@ -190,6 +195,7 @@ int lsh_launch(char **args)
     	    perror("lsh");
     	    exit(EXIT_FAILURE);
     	} 
+    	sleep(10);
     	
     } else if(pid < 0) {
     	// Error forking
@@ -284,6 +290,7 @@ void sigint_handler(int signo) {
     	return;
     } 
     siglongjmp(env, 77);
+    //printf("SIGTTIN detected\n");
 }
 
 int input_redirect(char **args, int pos) {
@@ -325,11 +332,11 @@ int output_redirect(char **args, int pos) {
     	perror("out");
     	exit(EXIT_FAILURE);
     } 
-    if(dup2(fdout, STDOUT_FILENO) == -1) {
+    if(dup2(fdout, STDOUT_FILENO) == -1) {  // Redirect fdout to 1
     	perror("dup2");
     	exit(EXIT_FAILURE);
     }
-    if(close(fdout) == -1) {
+    if(close(fdout) == -1) {	// Close the original fd
     	perror("close");
     	exit(EXIT_FAILURE);
     }
@@ -343,6 +350,82 @@ int output_redirect(char **args, int pos) {
     return 1;
 }
 
-int pipline(char **args, int pos) {
-
+int pipeline(char **args, int pos) {
+    // Save commands
+    char **args1 = &args[0];
+    char **args2 = &args[pos+1];
+    args[pos] = NULL;
+    
+    // Create pipe
+    int pipefd[2]; // 0 - read; 1 - write
+    int pid1, pid2;
+    if(pipe(pipefd) == -1) {
+    	perror("pipe");
+    	exit(EXIT_FAILURE);
+    }
+    
+    // Create child process, exe CMD1, write
+    if((pid1 = fork()) == -1) {
+    	perror("fork");
+    	exit(EXIT_FAILURE);
+    } 
+    if(pid1 == 0) {
+    	// Child process
+    	// Close the read end of the pipe
+    	if(close(pipefd[0]) == -1) {
+    	    perror("close");
+    	    exit(EXIT_FAILURE);
+        }
+        // Redirect stdout to the write end
+    	if(pipefd[1] != STDOUT_FILENO) {
+    	    if(dup2(pipefd[1], STDOUT_FILENO) == -1) { 
+    	        perror("dup2");
+    	        exit(EXIT_FAILURE);
+    	    }
+    	    // Close the orignal fd
+    	    if(close(pipefd[1]) == -1) {
+    	        perror("close");
+    	        exit(EXIT_FAILURE);
+            }
+    	}
+    	// Execute CMD1
+    	execvp(args1[0], args1); 
+    	perror("execvp");
+    	exit(EXIT_FAILURE);
+    }
+    
+    	// In parent process, exe CMD2, read
+    	if(close(pipefd[1]) == -1) {
+    	    perror("close");
+    	    exit(EXIT_FAILURE);
+        }
+        // Redirect stdout to the write end
+    	if(pipefd[0] != STDIN_FILENO) {
+    	    if(dup2(pipefd[0], STDIN_FILENO) == -1) { 
+    	        perror("dup2");
+    	        exit(EXIT_FAILURE);
+    	    }
+    	    // Close the orignal fd
+    	    if(close(pipefd[0]) == -1) {
+    	        perror("close");
+    	        exit(EXIT_FAILURE);
+            }
+    	}
+    	// Execute CMD2
+    	execvp(args2[0], args2); 
+    	perror("execvp");
+    	exit(EXIT_FAILURE);    
+    
+      
+    // Wait for 2 child process
+    if (wait(NULL) == -1) {
+        perror("wait");
+        exit(EXIT_FAILURE);
+    }
+    if (wait(NULL) == -1) {
+        perror("wait");
+        exit(EXIT_FAILURE);
+    }
+    
+    return 1;
 }

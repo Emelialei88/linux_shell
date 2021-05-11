@@ -4,26 +4,26 @@
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
+#include <setjmp.h>
 
 #define LSH_RL_BUFSIZE 1024
 #define LSH_TOK_BUFSIZE 64
 #define LSH_TOK_DELIM " \t\r\n\a"
-
-typedef void (*sighandler_t)(int);
 
 void lsh_loop(void);
 char *lsh_read_line(void);
 char **lsh_split_line(char *line);
 int lsh_launch(char **args);
 int lsh_execute(char **args);
-sighandler_t signal(int signum, sighandler_t handler);
+void sigint_handler(int signo);
+
+static sigjmp_buf env;
+static volatile sig_atomic_t jump_active = 0;
 
 int main(int argc, char *argv[])
 {
   // Load config files
   
-  // Ignore the SIGINT signal for the main process
-  signal(SIGINT, SIG_IGN);
   // Run command loop
   lsh_loop();
   
@@ -38,7 +38,16 @@ void lsh_loop(void)
   char **args;
   int status;
   
+  signal(SIGINT, sigint_handler);
+  
   do {
+    if(sigsetjmp(env, 1) == 77) {
+    	// Restart loop
+    	printf("\n");
+    	continue;
+    }   
+    jump_active = 1;
+    
     printf(" > ");
     line = lsh_read_line();
     args = lsh_split_line(line);
@@ -218,34 +227,9 @@ int lsh_execute(char **args)
     return lsh_launch(args);
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+void sigint_handler(int signo) {
+    if(!jump_active) {
+    	return;
+    } 
+    siglongjmp(env, 77);
+}

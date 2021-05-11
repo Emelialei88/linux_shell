@@ -19,3 +19,10 @@ Terminate the shell
 Only support standard command:
 command > file  -- output_redirect
 command < file  -- input_redirect
+
+## Add pipeline
+e.g. echo "Hello" | cat
+Question remain to solve:
+Why it cannot run correctly when two child process are created?
+As in the reference web: https://panqiincs.me/2017/04/19/write-a-shell-redirect-and-pipeline/
+When debugging, it shows that only the command1 process terminated

@@ -14,3 +14,8 @@ on pressing Ctrl-C
 
 ## Add Ctrl-D funtion
 Terminate the shell
+
+## Add redirection
+Only support standard command:
+command > file  -- output_redirect
+command < file  -- input_redirect

@@ -5,6 +5,9 @@
 #include <string.h>
 #include <signal.h>
 #include <setjmp.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #define LSH_RL_BUFSIZE 1024
 #define LSH_TOK_BUFSIZE 64
@@ -16,6 +19,9 @@ char **lsh_split_line(char *line);
 int lsh_launch(char **args);
 int lsh_execute(char **args);
 void sigint_handler(int signo);
+int input_redirect(char **args, int pos);
+int output_redirect(char **args, int pos);
+int pipline(char **args, int pos);
 
 static sigjmp_buf env;
 static volatile sig_atomic_t jump_active = 0;
@@ -60,7 +66,7 @@ void lsh_loop(void)
     line = lsh_read_line();
     if(line == NULL) {
     	printf("\n");
-    	exit(0);
+    	exit(EXIT_SUCCESS);
     }
         
     args = lsh_split_line(line);
@@ -148,7 +154,7 @@ char **lsh_split_line(char *line)
 /*Child process*/
 int lsh_launch(char **args)
 {
-    pid_t pid, wpid;
+    pid_t pid;
     int status;
     pid = fork();
     
@@ -159,7 +165,27 @@ int lsh_launch(char **args)
 	sigemptyset(&s_child.sa_mask);
 	s_child.sa_flags = SA_RESTART;
 	sigaction(SIGINT, &s_child, NULL);
+	
+	// Execute Redirection and Piplining
+	/* This part has to be put into lsh_launch func
+	   If it is put in lsh_execute func, then 
+	   lsh terminates after executing redirection
+	   Reason: It is in the child process, so termination 
+	   only results in returning to parent process
+	*/
+	for(int j=0; args[j] != NULL; j++) {
+	    if(strcmp(args[j], "<") == 0) {
+	        return input_redirect(args, j);
+	    }
+    	    if(strcmp(args[j], ">") == 0) {
+    	        return output_redirect(args, j);
+    	    }
+    	    if(strcmp(args[j], "|") == 0) {
+    	        return pipline(args, j);
+    	    }
+	}
     	
+    	// Execute normal commands
     	if(execvp(args[0], args) < 0) {
     	    perror("lsh");
     	    exit(EXIT_FAILURE);
@@ -171,7 +197,7 @@ int lsh_launch(char **args)
     } else {
     	// Parent process	
     	do {
-	    wpid = waitpid(pid, &status, WUNTRACED);    
+	    waitpid(pid, &status, WUNTRACED);    
 	} while (!WIFEXITED(status) && !WIFSIGNALED(status));
     }
     
@@ -230,7 +256,7 @@ int lsh_help(char **args) {
 }
 
 int lsh_exit(char **args) {
-    return 0;
+    return EXIT_SUCCESS;
 }
 
 int lsh_execute(char **args) 
@@ -241,13 +267,15 @@ int lsh_execute(char **args)
     	// Entered an empty cmd
     	return 1;
     }
-    
+       
+    // Execute built in commands
     for(i=0; i<lsh_num_builtins(); i++) {
     	if(strcmp(args[0], builtin_str[i]) == 0) {
     	    return (*builtin_func[i])(args);
     	}
     }
     
+    // Execute command line commands
     return lsh_launch(args);
 }
 
@@ -256,4 +284,65 @@ void sigint_handler(int signo) {
     	return;
     } 
     siglongjmp(env, 77);
+}
+
+int input_redirect(char **args, int pos) {
+    char *filename = args[pos+1];
+    args[pos] = NULL;
+    
+    // Redirect input from file fd to stdin (fd=0)
+    int fdin = open(filename, O_RDONLY);
+    if(fdin == -1) {
+    	perror("open");
+    	exit(EXIT_FAILURE);
+    } 
+    if(dup2(fdin, STDIN_FILENO) == -1) {
+    	perror("dup2");
+    	exit(EXIT_FAILURE);
+    }
+    if(close(fdin) == -1) {
+    	perror("close");
+    	exit(EXIT_FAILURE);
+    }
+    
+    // Execute commands
+    if (execvp(args[0], args) < 0) {
+    	perror("execvp");
+    	exit(EXIT_FAILURE);
+    }
+    
+    return 1;
+}
+
+int output_redirect(char **args, int pos) {
+    char *filename = args[pos+1];
+    args[pos] = NULL;
+    
+    // Redirect input from file fd to stdin (fd=0)
+    int fdout = open(filename, O_WRONLY | O_CREAT | O_TRUNC,
+                     S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    if(fdout == -1) {
+    	perror("out");
+    	exit(EXIT_FAILURE);
+    } 
+    if(dup2(fdout, STDOUT_FILENO) == -1) {
+    	perror("dup2");
+    	exit(EXIT_FAILURE);
+    }
+    if(close(fdout) == -1) {
+    	perror("close");
+    	exit(EXIT_FAILURE);
+    }
+    
+    // Execute commands
+    if (execvp(args[0], args) < 0) {
+    	perror("execvp");
+    	exit(EXIT_FAILURE);
+    }
+    
+    return 1;
+}
+
+int pipline(char **args, int pos) {
+
 }

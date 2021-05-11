@@ -58,6 +58,11 @@ void lsh_loop(void)
     
     printf(" > ");
     line = lsh_read_line();
+    if(line == NULL) {
+    	printf("\n");
+    	exit(0);
+    }
+        
     args = lsh_split_line(line);
     status = lsh_execute(args);
 
@@ -78,6 +83,13 @@ char *lsh_read_line(void)
 	exit(EXIT_FAILURE);
     }
 
+    // Return NULL on entering Ctrl-D
+    c = getchar();
+    if(c == EOF) {
+    	return NULL;
+    }
+    
+    ungetc(c, stdin);
     while(1) {
     	c = getchar();
 	if(c == '\n' || c == EOF) {

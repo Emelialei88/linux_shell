@@ -38,7 +38,13 @@ void lsh_loop(void)
   char **args;
   int status;
   
-  signal(SIGINT, sigint_handler);
+  // Replace to increase protablility
+  // Setup SIGINT
+  struct sigaction s;
+  s.sa_handler = sigint_handler;
+  sigemptyset(&s.sa_mask);
+  s.sa_flags = SA_RESTART;
+  sigaction(SIGINT, &s, NULL);
   
   do {
     if(sigsetjmp(env, 1) == 77) {
@@ -46,6 +52,8 @@ void lsh_loop(void)
     	printf("\n");
     	continue;
     }   
+    // Guarantee that a signal will only 
+    // be delivered after the jump point has been set 
     jump_active = 1;
     
     printf(" > ");
@@ -80,7 +88,6 @@ char *lsh_read_line(void)
 	    buf[pos] = c;
 	}
 	pos++;
-
 
 	// If we exceeded the buffer, reallocate;
 	if(pos >= bufsize) {
@@ -135,12 +142,17 @@ int lsh_launch(char **args)
     
     if(pid == 0) {
     	// Child process
-    	// Restore the default behaviour of SIGINT
-    	signal(SIGINT, SIG_DFL);
+    	struct sigaction s_child;
+	s_child.sa_handler = sigint_handler;
+	sigemptyset(&s_child.sa_mask);
+	s_child.sa_flags = SA_RESTART;
+	sigaction(SIGINT, &s_child, NULL);
+    	
     	if(execvp(args[0], args) < 0) {
     	    perror("lsh");
+    	    exit(EXIT_FAILURE);
     	} 
-    	exit(EXIT_FAILURE);
+    	
     } else if(pid < 0) {
     	// Error forking
     	perror("lsh");

@@ -1,4 +1,4 @@
-# linux_shell
+# 1.linux_shell
 ## Initial Version
 Only contain some basic callings to C functions
 
@@ -26,3 +26,6 @@ Question remain to solve:
 Why it cannot run correctly when two child process are created?
 As in the reference web: https://panqiincs.me/2017/04/19/write-a-shell-redirect-and-pipeline/
 When debugging, it shows that only the command1 process terminated
+
+
+# 2. Text_editor
